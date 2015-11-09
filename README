@@ -1,0 +1,9 @@
+To build jar which is put in target/scala-x.yz/
+
+    sbt one-jar
+
+To run
+
+    java -jar <jar-file>
+
+in a folder that contains a valid application.conf file
