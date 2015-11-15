@@ -9,6 +9,10 @@ import org.slf4j.LoggerFactory
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object ConfigApp {
 
   def logger = LoggerFactory.getLogger(this.getClass)
@@ -22,24 +26,70 @@ object ConfigApp {
       logger.warn(f"Exiting, configuration file not found: $confFileName")
     }
     else {
-      val conf = ConfigFactory.parseFile(configFile)
+      val myConfig: MyConfig = readConfiguration(configFile)
 
-      conf.checkValid(ConfigFactory.defaultReference(), "nems", "tasks", "data_sources", "notifications")
+//      myConfig.tasks.map(task => runTask(task))
 
-      val nemsConfig = conf.as[NemsConfig]("nems")
+//      val taskResults: List[Future[TaskResult]] = for {
+//        task <- myConfig.tasks
+//        taskResult <- runTask(task)
+//      } yield taskResult
 
-      val myNotifications = conf.as[MyNotifications]("notifications")
 
-      val myDataSources = conf.as[Set[MyDataSource]]("data_sources")
+      val taskResults2: List[Future[TaskResult]] = myConfig.tasks.map(task => runTask(task))
 
-      val myTasks = conf.as[List[MyTask]]("tasks")
+      val x: Future[List[TaskResult]] = Future.sequence(taskResults2)
 
-      val myConfig = MyConfig(nemsConfig, myNotifications, myDataSources, myTasks)
+      x.map(taskRes => {
+        logger.info(f"Finished with ${taskRes.size} tasks")
+        taskRes.foreach(task => logger.info(f"Task 1 was: $task"))
+        taskRes.foreach{ task =>
+          task match {
+            case TaskSuccess() => logger.info(f"Task ok: $task")
+            case TaskFailure(msg) => logger.error(f"Task $task failed: $msg")
+          }
+        }
+      })
 
-      myConfig.tasks.foreach(println(_))
+      Await.result(x, Duration(10, SECONDS))
+//      httpRetriever.getSomething()
 
     }
   }
+
+  private def runTask(task: MyTask): Future[TaskResult] = {
+    val random = Math.random()
+    if (random > 0.6){
+      Future(TaskFailure(f"Failure: $random"))
+    }
+    else Future(TaskSuccess())
+
+  }
+
+  private def readConfiguration(configFile: File): MyConfig = {
+    val conf = ConfigFactory.parseFile(configFile)
+
+    conf.checkValid(ConfigFactory.defaultReference(), "nems", "tasks", "data_sources", "notifications")
+
+    val nemsConfig = conf.as[NemsConfig]("nems")
+
+    val myNotifications = conf.as[MyNotifications]("notifications")
+
+    val myDataSources = conf.as[Set[MyDataSource]]("data_sources")
+
+    val myTasks = conf.as[List[MyTask]]("tasks")
+
+    val myConfig = MyConfig(nemsConfig, myNotifications, myDataSources, myTasks)
+    myConfig
+  }
+
+  trait TaskResult {
+
+  }
+
+  case class TaskSuccess() extends TaskResult
+
+  case class TaskFailure(errorMsg: String) extends TaskResult
 
   case class MyConfig(nemsConfig: NemsConfig,
                       notifications: MyNotifications,

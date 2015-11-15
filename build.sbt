@@ -15,3 +15,4 @@ oneJarSettings
 libraryDependencies += "com.typesafe" % "config" % "1.3.0"
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.0.9"
 libraryDependencies += "net.ceedubs" %% "ficus" % "1.1.2"
+libraryDependencies += "net.databinder.dispatch" %% "dispatch-core" % "0.11.2"
