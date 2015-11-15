@@ -1,108 +1,88 @@
 package stig.no.config
 
 import java.io.File
-import java.util
 
-import com.typesafe.config.{Config, ConfigFactory}
-import org.slf4j.LoggerFactory
-
+import com.typesafe.config.ConfigFactory
+import mail.Mail
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.slf4j.LoggerFactory
 
 object ConfigApp {
 
   def logger = LoggerFactory.getLogger(this.getClass)
+  private val clientController = new ClientController
+  private val confFileName = "application.conf"
 
-  def main (args: Array[String]) = {
-    logger.info("started!")
+  def main (args: Array[String]):Unit = {
+    logger.debug("started!")
 
-    val confFileName: String = "application.conf"
     val configFile: File = new File(confFileName)
     if (! configFile.exists()){
       logger.warn(f"Exiting, configuration file not found: $confFileName")
     }
     else {
-      val myConfig: MyConfig = readConfiguration(configFile)
-
-//      myConfig.tasks.map(task => runTask(task))
-
-//      val taskResults: List[Future[TaskResult]] = for {
-//        task <- myConfig.tasks
-//        taskResult <- runTask(task)
-//      } yield taskResult
-
-
-      val taskResults2: List[Future[TaskResult]] = myConfig.tasks.map(task => runTask(task))
-
-      val x: Future[List[TaskResult]] = Future.sequence(taskResults2)
-
-      x.map(taskRes => {
-        logger.info(f"Finished with ${taskRes.size} tasks")
-        taskRes.foreach(task => logger.info(f"Task 1 was: $task"))
-        taskRes.foreach{ task =>
-          task match {
-            case TaskSuccess() => logger.info(f"Task ok: $task")
-            case TaskFailure(msg) => logger.error(f"Task $task failed: $msg")
-          }
-        }
-      })
-
-      Await.result(x, Duration(10, SECONDS))
-//      httpRetriever.getSomething()
-
+      val configuration = readConfiguration(configFile)
+      logger.debug("Configuration file read successfully")
+      clientController.start(configuration)
     }
-  }
-
-  private def runTask(task: MyTask): Future[TaskResult] = {
-    val random = Math.random()
-    if (random > 0.6){
-      Future(TaskFailure(f"Failure: $random"))
-    }
-    else Future(TaskSuccess())
-
   }
 
   private def readConfiguration(configFile: File): MyConfig = {
     val conf = ConfigFactory.parseFile(configFile)
 
-    conf.checkValid(ConfigFactory.defaultReference(), "nems", "tasks", "data_sources", "notifications")
+    conf.checkValid(ConfigFactory.defaultReference(), "nems", "tasks", "data_sources", "notifications", "email")
 
-    val nemsConfig = conf.as[NemsConfig]("nems")
+    val nemsConfig = conf.as[CfgNems]("nems")
 
-    val myNotifications = conf.as[MyNotifications]("notifications")
+    val myNotifications = conf.as[CfgNotifications]("notifications")
 
-    val myDataSources = conf.as[Set[MyDataSource]]("data_sources")
+    val myDataSources = conf.as[Set[CfgDataSource]]("data_sources")
 
-    val myTasks = conf.as[List[MyTask]]("tasks")
+    val myTasks = conf.as[List[CfgTask]]("tasks")
 
-    val myConfig = MyConfig(nemsConfig, myNotifications, myDataSources, myTasks)
+    val myMail = conf.as[CfgMail]("email")
+
+    val myConfig = MyConfig(nemsConfig, myNotifications, myDataSources, myTasks, myMail)
     myConfig
   }
 
-  trait TaskResult {
-
+  trait TaskResult{
+    def isOk: Boolean
+  }
+  trait Reporter {
+    def sendReport(results: List[TaskResult]): Boolean
   }
 
-  case class TaskSuccess() extends TaskResult
+  trait MailSender {
+    def a(mail: Mail)
+  }
 
-  case class TaskFailure(errorMsg: String) extends TaskResult
+  case class TaskSuccess(task: CfgTask) extends TaskResult{
+    override def isOk: Boolean = true
+  }
 
-  case class MyConfig(nemsConfig: NemsConfig,
-                      notifications: MyNotifications,
-                      data_sources: Set[MyDataSource],
-                      tasks: List[MyTask])
+  case class TaskFailure(task: CfgTask, errorMsg: String) extends TaskResult {
+    override def isOk: Boolean = false
+  }
 
-  case class MyNotifications(recipients: Set[String], notify_level: String)
+  case class MyConfig(nemsConfig: CfgNems,
+                      notifications: CfgNotifications,
+                      data_sources: Set[CfgDataSource],
+                      tasks: List[CfgTask],
+                      mail: CfgMail)
 
-  case class MyCredentials(username: String, password: String, api_key: String = "")
+  case class CfgMail(from_name: String, from_email: String, servers: List[CfgMailServer])
 
-  case class MyDataSource(name: String, category: String, credentials: MyCredentials)
+  case class CfgMailServer(name: String, host: String, port: Int, auth: Boolean, protocol: String, credentials: CfgCredentials)
 
-  case class MyTask(name: String, data_source_ref: String, tag_name: String, nems_data_type: String)
+  case class CfgNotifications(recipients: Set[String], notify_level: String, use: Set[String])
 
-  case class NemsConfig(target_url: String, credentials: MyCredentials)
+  case class CfgCredentials(username: String, password: String, api_key: String = "")
+
+  case class CfgDataSource(name: String, category: String, credentials: CfgCredentials)
+
+  case class CfgTask(name: String, data_source_ref: String, tag_name: String, nems_data_type: String)
+
+  case class CfgNems(target_url: String, credentials: CfgCredentials)
 }
