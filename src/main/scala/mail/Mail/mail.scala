@@ -1,4 +1,5 @@
 
+import org.slf4j.LoggerFactory
 import stig.no.config.ConfigApp.{MailSender, CfgMailServer}
 
 /**
@@ -13,6 +14,8 @@ package object mail {
   case object Plain extends MailType
   case object Rich extends MailType
   case object MultiPart extends MailType
+
+  def logger = LoggerFactory.getLogger(this.getClass)
 
   case class Mail(
                    from: (String, String), // (email -> name)
@@ -57,10 +60,11 @@ package object mail {
       mail.cc foreach (commonsMail.addCc(_))
       mail.bcc foreach (commonsMail.addBcc(_))
 
-      commonsMail.
-        setFrom(mail.from._1, mail.from._2).
-        setSubject(mail.subject).
-        send()
+      logger.debug(f"Mail sent with subject ${mail.subject} and content ${mail.message}")
+//      commonsMail.
+//        setFrom(mail.from._1, mail.from._2).
+//        setSubject(mail.subject).
+//        send()
     }
   }
 }

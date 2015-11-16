@@ -9,13 +9,13 @@ class TaskRunner {
 
   def logger = LoggerFactory.getLogger(this.getClass)
 
-  def run(task: CfgTask)(implicit ec: ExecutionContext): Future[TaskResult] = {
+  def run(task: CfgTask)(implicit ec: ExecutionContext): TaskResult = {
     logger.debug(f"Running task: ${task.name}")
     val random = Math.random()
     if (random > 0.6){
-      Future(TaskFailure(task, f"Failure: $random"))
+      TaskFailure(task, f"Failure: $random")
     }
-    else Future(TaskSuccess(task))
+    else TaskSuccess(task)
 
   }
 }
